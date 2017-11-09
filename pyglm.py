@@ -53,7 +53,7 @@ class GLM:
         self.learning_rate = learning_rate
         self.lambd = lambd
 
-    def l2_loss(self, X, y, weight, m, n):
+    def loss(self, X, y, weight, m, n):
         '''Computes the l2 regularized loss function
 
         Parameters
@@ -84,7 +84,10 @@ class GLM:
                 elif i != 0:
                     loss[i] = (1/m) * sum((np.dot(X, weight) - y) * X[:,i]) + (self.lambd/m) * weight[i]
         
-        #elif self.conv_method == 's-gradient':
+        elif self.conv_method == 's-gradient':
+            for i in range(0, n):
+                if i == 0:
+                        
             
         #elif self.conv_method == 'newton':
              
@@ -122,12 +125,15 @@ class GLM:
 
         if self.conv_method == 'b-gradient':
             for i in range(0, self.n_iter):
-                loss = self.l2_loss(X, y, weight, m, n)
+                loss = self.loss(X, y, weight, m, n)
                 weight = weight - self.learning_rate * loss
 
 
-        #elif self.conv_method == 's-gradient':
-
+        elif self.conv_method == 's-gradient':
+            for i in range(0, self.n_iter)
+                for i in range(0, m):
+                    loss = self.loss(X, y, weight, m, n)
+                    weight = weight - self.learning_rate * loss
 
         #elif self.conv_method == 'newton':
 
