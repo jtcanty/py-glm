@@ -17,7 +17,7 @@ class GLM:
 
     '''
 
-    def __init__(self, distribution='gaussian', n_iter=1000, conv_method='b-gradient', learning_rate=.0001,
+    def __init__(self, distribution='gaussian', n_iter=100, conv_method='b-gradient', learning_rate=.0001,
                     lambd=1):
         '''
 
@@ -78,16 +78,30 @@ class GLM:
         loss = np.zeros(n)
         
         if self.conv_method == 'b-gradient':
-            for i in range(0,n):
+            for i in range(0, n):
                 if i == 0:
                     loss[i] = (1/m) * sum((np.dot(X, weight) - y) * X[:,i])
                 elif i != 0:
                     loss[i] = (1/m) * sum((np.dot(X, weight) - y) * X[:,i]) + (self.lambd/m) * weight[i]
         
-        #elif self.conv_method == 's-gradient':
+        elif self.conv_method == 's-gradient':
+            if m == 0:
+                loss = (np.dot(X, weight) - y) * X[n]
+            elif m != 0:
+                loss = (np.dot(X, weight) - y) * X[n] + (self.lambd) * weight[n] 
+                
+        elif self.conv_method == 'newton':
+            gradient = np.zeros(n)
             
-        #elif self.conv_method == 'newton':
-             
+            for i in range(0, n):
+                print(np.dot(X, weight))
+                print(np.dot(X, weight) - y)
+                gradient[i] = (-1/m) * sum((np.dot(X, weight) - y) * X[:,i])
+                
+            inv_hessian = self.inverse_hessian(X, y, weight, m, n)
+            loss = inv_hessian * gradient
+                
+       
         return loss
     
     def fit(self, X, y):
@@ -108,9 +122,10 @@ class GLM:
 
         Returns
         -------
-
+        weight : array-like, shape = [n features]
+            Vector of optimized weights
+            
         '''
-        
         
         m = np.shape(X)[0]
         intercept = np.ones(m)
@@ -126,10 +141,16 @@ class GLM:
                 weight = weight - self.learning_rate * loss
 
 
-        #elif self.conv_method == 's-gradient':
-
-
-        #elif self.conv_method == 'newton':
+        elif self.conv_method == 's-gradient':
+            for i in range(0, m):
+                for j in range(0, n):
+                    loss = self.l2_loss(X[i,:], y[i], weight, i, j)
+                    weight = weight - self.learning_rate * loss
+        
+        elif self.conv_method == 'newton':
+            for i in range(0, self.n_iter):
+                loss = self.l2_loss(X, y, weight, m, n)
+                weight = weight - loss
 
 
         return weight
@@ -148,3 +169,38 @@ class GLM:
         '''
 
         return 'b'
+    
+    def inverse_hessian(self, X, y, weight, m, n):
+        '''Computes the Inverse of the Hessian of the log-likelihood function
+
+            Parameters
+            ----------
+            X : np.array
+                Numpy array of data
+            y : np.array
+                Numpy array of response labels
+            weight : np.array
+                Numpy array of parameter values
+            m : int
+                Number of training examples
+            n : int, 
+                Number of features
+            
+            
+
+            Returns
+            -------
+            inv_hessian : np.array
+                Numpy array of inverted Hessian matrix
+
+        '''
+
+        hessian = np.zeros((n,n))
+
+        for i in range(0, n):
+            for j in range(0, n):
+                hessian[i,j] = (1/m)*sum((np.dot(X, weight) - y) * X[:,i] * X[:,j])
+        print(hessian)
+        inv_hessian = np.linalg.inv(hessian)
+
+        return inv_hessian
