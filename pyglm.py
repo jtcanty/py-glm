@@ -2,7 +2,7 @@
 
 import numpy as np
 
-class GLM:
+class GLM(object):
     '''This class defines a generalized linear-model
 
     Parameters
@@ -17,7 +17,7 @@ class GLM:
 
     '''
 
-    def __init__(self, distribution='gaussian', n_iter=100, conv_method='b-gradient', learning_rate=.0001,
+    def __init__(self, distribution='gaussian', n_iter=1000, conv_method='b-gradient', learning_rate=1,
                     lambd=1):
         '''
 
@@ -76,6 +76,7 @@ class GLM:
 
         '''
         loss = np.zeros(n)
+        gradient = np.zeros(n)
         
         if self.conv_method == 'b-gradient':
             for i in range(0, n):
@@ -90,18 +91,13 @@ class GLM:
             elif m != 0:
                 loss = (np.dot(X, weight) - y) * X[n] + (self.lambd) * weight[n] 
                 
-        elif self.conv_method == 'newton':
-            gradient = np.zeros(n)
-            
+        elif self.conv_method == 'newton':      
             for i in range(0, n):
-                print(np.dot(X, weight))
-                print(np.dot(X, weight) - y)
-                gradient[i] = (-1/m) * sum((np.dot(X, weight) - y) * X[:,i])
-                
+                gradient[i] = (1/m) * sum((np.dot(X, weight) - y) * X[:,i])
             inv_hessian = self.inverse_hessian(X, y, weight, m, n)
-            loss = inv_hessian * gradient
-                
-       
+            loss = np.dot(inv_hessian, gradient)
+
+ 
         return loss
     
     def fit(self, X, y):
@@ -150,9 +146,9 @@ class GLM:
         elif self.conv_method == 'newton':
             for i in range(0, self.n_iter):
                 loss = self.l2_loss(X, y, weight, m, n)
-                weight = weight - loss
+                weight = weight - self.learning_rate * loss
 
-
+                
         return weight
 
     def predict(self, X):
@@ -175,18 +171,16 @@ class GLM:
 
             Parameters
             ----------
-            X : np.array
-                Numpy array of data
-            y : np.array
-                Numpy array of response labels
-            weight : np.array
-                Numpy array of parameter values
+            X : array-like, shape = [n_samples, n_features]
+                Vector of training data
+            y : array-like, shape = [n_samples]
+                Vector of response data
+            weight : array-like, shape = [n features]
+                Vector of weights
             m : int
                 Number of training examples
             n : int, 
                 Number of features
-            
-            
 
             Returns
             -------
@@ -195,12 +189,7 @@ class GLM:
 
         '''
 
-        hessian = np.zeros((n,n))
-
-        for i in range(0, n):
-            for j in range(0, n):
-                hessian[i,j] = (1/m)*sum((np.dot(X, weight) - y) * X[:,i] * X[:,j])
-        print(hessian)
+        hessian = np.dot(np.transpose(X), X)    
         inv_hessian = np.linalg.inv(hessian)
 
         return inv_hessian
