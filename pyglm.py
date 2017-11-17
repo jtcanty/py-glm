@@ -17,7 +17,7 @@ class GLM(object):
 
     '''
 
-    def __init__(self, distribution='gaussian', n_iter=1000, conv_method='b-gradient', learning_rate=1,
+    def __init__(self, distribution='gaussian', n_iter=1000, conv_method='b-gradient', reg='l2', learning_rate=1,
                     lambd=1):
         '''
 
@@ -33,6 +33,10 @@ class GLM(object):
         conv_method : str
             Fitting method used:
             b-gradient | s-gradient | newton
+            
+        reg : str
+            Name of the regularization term. Choices:
+            l2 | l1 | elastic 
 
         learning_rate : float
             Learning rate parameter implemented during gradient descent
@@ -50,10 +54,11 @@ class GLM(object):
         self.distribution = distribution
         self.n_iter = n_iter
         self.conv_method = conv_method
+        self.reg = reg
         self.learning_rate = learning_rate
         self.lambd = lambd
 
-    def l2_loss(self, X, y, weight, m, n):
+    def loss(self, X, y, weight, m, n):
         '''Computes the l2 regularized loss function
 
         Parameters
@@ -133,59 +138,48 @@ class GLM(object):
 
         if self.conv_method == 'b-gradient':
             for i in range(0, self.n_iter):
-                loss = self.l2_loss(X, y, weight, m, n)
+                loss = self.loss(X, y, weight, m, n)
                 weight = weight - self.learning_rate * loss
 
 
         elif self.conv_method == 's-gradient':
             for i in range(0, m):
                 for j in range(0, n):
-                    loss = self.l2_loss(X[i,:], y[i], weight, i, j)
+                    loss = self.loss(X[i,:], y[i], weight, i, j)
                     weight = weight - self.learning_rate * loss
         
         elif self.conv_method == 'newton':
             for i in range(0, self.n_iter):
-                loss = self.l2_loss(X, y, weight, m, n)
+                loss = self.loss(X, y, weight, m, n)
                 weight = weight - self.learning_rate * loss
 
                 
         return weight
 
-    def predict(self, X):
+    def predict(self, X, weight):
         '''Predicts response variables using the optimal weights
 
         Parameters
         ----------
         X : array-like, shape = [n_samples, n_features]
             Vector of training data
+        weight : array-like, shape = [n features]
+            Vector of optimized weights  
 
         Returns
         -------
-
+        prediction : array-like, shape = [n_samples]
+            Vector of predicted response
         '''
-
-        return 'b'
+        
+        prediction = np.dot(X, weight)
+        
+        return prediction
     
     def inverse_hessian(self, X, y, weight, m, n):
         '''Computes the Inverse of the Hessian of the log-likelihood function
 
-            Parameters
-            ----------
-            X : array-like, shape = [n_samples, n_features]
-                Vector of training data
-            y : array-like, shape = [n_samples]
-                Vector of response data
-            weight : array-like, shape = [n features]
-                Vector of weights
-            m : int
-                Number of training examples
-            n : int, 
-                Number of features
-
-            Returns
-            -------
-            inv_hessian : np.array
-                Numpy array of inverted Hessian matrix
+          
 
         '''
 
@@ -193,3 +187,43 @@ class GLM(object):
         inv_hessian = np.linalg.inv(hessian)
 
         return inv_hessian
+    
+    def reg(self, ):
+        '''Computes the regularization term for a training set
+            
+        Parameters
+        ----------
+        reg : str
+            Name of the regularization term. Choices:
+            l2 | l1 | elastic 
+
+        Returns
+        -------
+            
+        '''
+        
+        if self.reg == 'l1':
+            
+            
+        elif self.reg == 'l2':
+            
+            
+        elif self.reg == 'elastic':
+            
+        
+    def mu(self):
+        '''Computes the response function for different distributions
+            
+        Parameters
+        ----------
+        distribution : str
+            Name of the distribution. Choices:
+            gaussian | poisson | inv_gaussian | gamma | multinomial
+
+        Returns
+        -------
+            
+        '''
+        
+
+    
