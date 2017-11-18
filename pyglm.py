@@ -3,7 +3,7 @@
 import numpy as np
 
 class GLM(object):
-    '''This class defines a generalized linear-model
+    '''This class defines an object for estimating a generalized linear-model
 
     Parameters
     ----------
@@ -193,3 +193,27 @@ class GLM(object):
         inv_hessian = np.linalg.inv(hessian)
 
         return inv_hessian
+    
+    def response():
+        '''Computes the canonical response functions for the specified distribution
+        
+            Parameters
+            ----------
+            
+            Returns
+            -------
+            
+        '''
+        
+        
+    def reg():
+        '''Computes the regularization term for the loss function
+        
+            Parameters
+            ----------
+            
+            
+            Returns
+            -------
+            
+        '''
