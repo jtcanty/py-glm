@@ -139,16 +139,15 @@ def _loss(distr, descent, lambd, alpha, x, y, beta, n_samples, n_features):
     
     if descent == 'BGD':
         for i in range(0, n_features):
-            mu = _mu(dist, x, beta)
+            mu = _mu(distr, x, beta)
             diff = sum((mu - y) * x[:,i])
             if i == 0:
-                loss[i] = (1/n_samples) * diff
+                loss[i] = (1 / n_samples) * diff
             elif i != 0:
-                loss[i] = (1/(2 * n_samples)) * diff 
-                            + _reg(lambd, alpha, beta[i])
+                loss[i] = (1 / (2 * n_samples)) * diff + _reg(lambd, alpha, beta[i])
 
     if descent == 'SGD':
-        mu = _mu(dist, x, beta)
+        mu = _mu(distr, x, beta)
         diff = (mu - y) * x[n_features]
         if n_samples == 0:
             loss = diff
@@ -157,10 +156,10 @@ def _loss(distr, descent, lambd, alpha, x, y, beta, n_samples, n_features):
 
     if descent == 'N':   
         grad = np.zeros(n_features)
-        mu = _mu(dist, x, beta)
+        mu = _mu(distr, x, beta)
         for i in range(0, n_features):
             diff = sum((mu - y) * x[:,i])
-            grad[i] = (1/n_samples) * diff
+            grad[i] = (1 / n_samples) * diff
         
         # Compute inverse Hessian matrix
         inv_hessian = _inverse_hessian(x)
@@ -183,9 +182,15 @@ class GLM(object):
         Vector of weights
     '''
 
-    def __init__(self, distr='gaussian', task='regression',
-                 n_iter=100, descent='BGD', regularization='elasticnet',
-                 learning_rate=1, lambd=1, alpha=0.5):
+    def __init__(self, 
+                 distr='gaussian', 
+                 task='regression',
+                 n_iter=100, 
+                 descent='BGD', 
+                 regularization='elasticnet',
+                 learning_rate=1, 
+                 lambd=1, 
+                 alpha=0.5):
         '''
 
         Attributes
@@ -244,7 +249,7 @@ class GLM(object):
         '''Checks the whether the task is classification or regularization'''
         try:
             return TASK[self.task]
-        except KeyError
+        except KeyError:
             raise ValueError('Task %s is not supported'
                              % self.task)
             
@@ -252,7 +257,7 @@ class GLM(object):
         '''Checks the error distribution to be used'''
         try:
             return DISTR_TYPES[self.distr]
-        except KeyError
+        except KeyError:
             raise ValueError('Distribution %s is not supported'
                              % self.distr)
         
@@ -260,7 +265,7 @@ class GLM(object):
         '''Validates the learning method'''
         try:
             return LEARNING_METHOD[self.descent]
-        except KeyError
+        except KeyError:
             raise ValueError('Learning method %s is not supported'
                              % self.descent)
         
@@ -268,7 +273,7 @@ class GLM(object):
         '''Validates the regularization method'''
         try:
             return REGULARIZATION_METHOD[self.regularization]
-        except KeyError
+        except KeyError:
             raise ValueError('Regularization method %s is not supported'
                              % self.regularization)
         
@@ -298,10 +303,10 @@ class GLM(object):
         if n_samples != np.shape(y)[0]:
             raise ValueError('Dimension of response should be (n_samples,)')
             
-        if not isinstance(x, np.ndarray)
+        if not isinstance(x, np.ndarray):
             x = np.array(x)
             
-        if not isinstance(y, np.ndarray)
+        if not isinstance(y, np.ndarray):
             y = np.array(y)
                    
         # Construct bias term
@@ -325,11 +330,11 @@ class GLM(object):
                 for j in range(0, n_features):
                     loss = _loss(self.distr, self.descent, 
                                  self.lambd, self.alpha, 
-                                 x[i,:], y[j], beta, 
+                                 x[i,:], y[i], beta, 
                                  i, j)
                     beta -= self.learning_rate * loss
         
-        elif self.descent == 'N:
+        elif self.descent == 'N':
             for i in range(0, self.n_iter):
                 loss = _loss(self.distr, self.descent, 
                              self.lambd, self.alpha, 
@@ -356,25 +361,9 @@ class GLM(object):
         yhat : array-like, shape = [n_samples]
             Vector of predicted response
         '''
-        if not isinstance(x, np.ndarray)
+        if not isinstance(x, np.ndarray):
             raise ValueError('Training data should be of type %s'
                              % np.ndarray)
             
         yhat = np.dot(x, beta) 
-        return yhat
-    
-    
-
-
-        
-
-        
-            
-        
-
-            
-        
-        
-        
-
-    
+        return yhat    
