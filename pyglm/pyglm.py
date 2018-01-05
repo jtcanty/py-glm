@@ -3,7 +3,7 @@
 import numpy as np
 import random
 
-DISTR_TYPES = {'gaussian': 0, 'poisson': 1, 'inv_gaussian': 2, 'exponential': 3, 'multinomial': 4}
+DISTR_TYPES = {'gaussian': 0, 'poisson': 1, 'inv_gaussian': 2, 'exponential': 3, 'categorical': 4}
 LEARNING_METHOD = {'BGD': 0, 'SGD': 1, 'N': 2}
 REGULARIZATION_METHOD = {'l1': 0 ,'l2': 1, 'elasticnet': 2}
 TASK = {'classification': 0, 'regression': 1}
@@ -15,7 +15,7 @@ def _mu(distr, x, beta):
     ----------
     dist : str
         Name of the distribution. Choices:
-        gaussian | poisson | inv_gaussian | exponential | multinomial
+        gaussian | poisson | inv_gaussian | exponential | categorical
         
     beta : array-like, shape = [n features]
                 Vector of weights
@@ -46,7 +46,7 @@ def _mu(distr, x, beta):
         mu = 1 / nu
         return mu
 
-    elif distr == 'multinomial':
+    elif distr == 'categorical':
         nu = np.dot(x, beta)
         mu = 1 / (1 + np.exp(-nu))
         return mu
@@ -89,84 +89,114 @@ def _reg(lambd, alpha, beta):
         Value computed from regularization   
     '''
     reg = lambd * alpha * beta + lambd * (1 - alpha)
+    
     return reg
 
 
-def _loss(distr, descent, lambd, alpha, x, y, beta, n_samples, n_features):
-    '''Computes the regularized empirical loss function
+def _bgd(n_iter, distr, descent, 
+         lambd, alpha, learning_rate, 
+         x, y, beta, 
+         n_samples, n_features):          
+    '''Implements variable-size batch gradient descent method'''
+    for i in range(0, n_iter):  
+        
+        # Initialize array of gradients for each feature
+        grad = np.zeros(n_features)
+        
+        # Compute gradient for each feature
+        for j in range(0, n_features):
+            mu = _mu(distr, x, beta)
+            grad_update = sum(_grad(distr, mu, y) * x[:,j])
+            
+            # Apply regularization
+            if j == 0:
+                grad[j] = (1 / n_samples) * grad_update    
+            elif j != 0:
+                grad[j] = (1 / (2 * n_samples)) * grad_update + _reg(lambd, alpha, beta[j])
+        
+        beta -= learning_rate * grad
+     
+    return beta
+    
+    
+def _sgd(n_iter, distr, descent, 
+         lambd, alpha, learning_rate, 
+         x, y, beta, 
+         n_samples, n_features):
+    '''Implements stochastic gradient descent method'''
+    for i in range(0, n_samples):
+        
+        # Initialize array of gradients for each feature
+        grad = np.zeros(n_features)
+        
+        # Compute gradient for each feature
+        for j in range(0, n_features):       
+            mu = _mu(distr, x, beta)
+            grad_update = _grad(distr, mu[i], y[i]) * x[i,j]
+            
+            # Apply regularization
+            if j == 0:
+                grad = grad_update
+            elif j != 0:
+                grad = grad_update + _reg(lambd, alpha, beta[j])
+            
+        beta -= learning_rate * grad
+            
+    return beta
+
+
+def _newton(n_iter, distr, descent, 
+            lambd, alpha, learning_rate, 
+            x, y, beta, 
+            n_samples, n_features):
+    '''Implements newton coordinate descent method''' 
+    for i in range(0, n_iter):
+        
+        # Initialize array of gradients for each feature
+        grad = np.zeros(n_features)
+        
+        # Compute gradients for each feature
+        for j in range(0, n_features):
+            mu = _mu(distr, x, beta)     
+            grad_update = sum(_grad(distr, mu, y) * x[:,j])
+            grad[j] = (1 / n_samples) * grad_update
+
+        # Compute inverse Hessian matrix
+        inv_hessian = _inverse_hessian(x)
+        loss = np.dot(inv_hessian, grad)
+            
+        beta -= learning_rate * loss
+        
+    return beta
+
+    
+def _grad(distr, mu, y):
+    '''Computes the gradient of empirical loss function. 
 
     Parameters
     ----------
     distr : str
         Name of the distribution. Choices:
         gaussian | poisson | inv_gaussian | exponential | multinomial
+        
+    mu : float, array-like
+        Expectation value of the distribution function for a single sample
     
-    descent : str
-        Fitting method used:
-        BGD | SGD |N
-        BGD = batch gradient descent
-        SGD = stochastic gradient descent
-        N = Newton's method
-        
-    lambd : float
-        General regularization parameter
-            
-    alpha : float
-        Elastic net regularization parameter
-        alpha = 0   
-        
-    x : array-like, shape = [n_samples, n_features]
-        Vector of training data
+    x : float, array-like
 
-    y : array-like, shape = [n_samples]
+    y : float, array-like, shape = [n_samples]
         Vector of response data
-
-    beta : array-like, shape = [n features]
-        Vector of weights
-
-    n_samples : int
-        Number of training examples
-
-    n_features : int
-        Number of features (including intercept)
 
     Returns
     -------
     loss : int
         Computed loss 
     '''
-    loss = np.zeros(n_features)
-    
-    if descent == 'BGD':
-        for i in range(0, n_features):
-            mu = _mu(distr, x, beta)
-            diff = sum((mu - y) * x[:,i])
-            if i == 0:
-                loss[i] = (1 / n_samples) * diff
-            elif i != 0:
-                loss[i] = (1 / (2 * n_samples)) * diff + _reg(lambd, alpha, beta[i])
-
-    if descent == 'SGD':
-        mu = _mu(distr, x, beta)
-        diff = (mu - y) * x[n_features]
-        if n_samples == 0:
-            loss = diff
-        elif n_samples != 0:
-            loss = diff + _reg(lambd, alpha, beta[n_features])
-
-    if descent == 'N':   
-        grad = np.zeros(n_features)
-        mu = _mu(distr, x, beta)
-        for i in range(0, n_features):
-            diff = sum((mu - y) * x[:,i])
-            grad[i] = (1 / n_samples) * diff
+    grad = mu - y
         
-        # Compute inverse Hessian matrix
-        inv_hessian = _inverse_hessian(x)
-        loss = np.dot(inv_hessian, grad)
+    return grad
 
-    return loss
- 
+#def _cross_validation():
     
 class GLM(object):
     '''This class defines an object for estimating a generalized linear-model
@@ -293,6 +323,7 @@ class GLM(object):
             Vector of optimized weights   
         '''
         
+        # Check constants and parameters
         self.check_parameters()
         self.get_task()
         self.get_distribution()
@@ -315,32 +346,26 @@ class GLM(object):
         x = x.T
 
         n_features = np.shape(x)[1]
-        beta = np.zeros(n_features)
+        beta = np.ones(n_features)
         
+        # Select descent method
         if self.descent == 'BGD':
-            for i in range(0, self.n_iter):
-                loss = _loss(self.distr, self.descent, 
-                             self.lambd, self.alpha, 
-                             x, y, beta, 
-                             n_samples, n_features)
-                beta -= self.learning_rate * loss
-
+            beta = _bgd(self.n_iter, self.distr, self.descent, 
+                        self.lambd, self.alpha, self.learning_rate,
+                        x, y, beta, 
+                        n_samples, n_features)
+            
         elif self.descent == 'SGD':
-            for i in range(0, n_samples):
-                for j in range(0, n_features):
-                    loss = _loss(self.distr, self.descent, 
-                                 self.lambd, self.alpha, 
-                                 x[i,:], y[i], beta, 
-                                 i, j)
-                    beta -= self.learning_rate * loss
-        
+            beta = _sgd(self.n_iter, self.distr, self.descent, 
+                        self.lambd, self.alpha, self.learning_rate,
+                        x, y, beta, 
+                        n_samples, n_features)
+            
         elif self.descent == 'N':
-            for i in range(0, self.n_iter):
-                loss = _loss(self.distr, self.descent, 
-                             self.lambd, self.alpha, 
-                             x, y, beta, 
-                             n_samples, n_features)
-                beta -= self.learning_rate * loss
+            beta = _newton(self.n_iter, self.distr, self.descent, 
+                           self.lambd, self.alpha, self.learning_rate,
+                           x, y, beta, 
+                           n_samples, n_features)
                 
         return beta
 
@@ -348,22 +373,22 @@ class GLM(object):
     def predict(self, x, beta):
         '''Predicts response variables using the optimal weights
 
-        Parameters
-        ----------
-        x : array-like, shape = [n_samples, n_features]
-            Vector of training data
-            
-        beta : array-like, shape = [n features]
-            Vector of optimized weights  
+            Parameters
+            ----------
+            x : array-like, shape = [n_samples, n_features]
+                Vector of training data
 
-        Returns
-        -------
-        yhat : array-like, shape = [n_samples]
-            Vector of predicted response
+            beta : array-like, shape = [n features]
+                Vector of optimized weights  
+
+            Returns
+            -------
+            yhat : array-like, shape = [n_samples]
+                Vector of predicted response
         '''
         if not isinstance(x, np.ndarray):
             raise ValueError('Training data should be of type %s'
                              % np.ndarray)
-            
+
         yhat = np.dot(x, beta) 
         return yhat    
