@@ -3,9 +3,9 @@
 import numpy as np
 import random
 
-DISTR_TYPES = {'gaussian': 0, 'poisson': 1, 'inv_gaussian': 2, 'exponential': 3, 'categorical': 4}
-LEARNING_METHOD = {'BGD': 0, 'SGD': 1, 'N': 2}
-REGULARIZATION_METHOD = {'l1': 0 ,'l2': 1, 'elasticnet': 2}
+DISTRIBUTION = {'gaussian': 0, 'poisson': 1, 'inv_gaussian': 2, 'exponential': 3, 'categorical': 4, 'softmax': 5}
+DESCENT = {'bgd': 0, 'newton': 1}
+PENALTY = {'l1': 0 ,'l2': 1, 'elasticnet': 2}
 TASK = {'classification': 0, 'regression': 1}
 
 def _mu(distr, x, beta):
@@ -68,8 +68,8 @@ def _inverse_hessian(x):
     return inv_hessian
 
 
-def _reg(lambd, alpha, beta):
-    '''Computes the regularization term for a training set
+def _penalty(lambd, alpha, beta):
+    '''Computes the penalty term
 
     Parameters
     ----------   
@@ -80,7 +80,7 @@ def _reg(lambd, alpha, beta):
         Elastic net regularization parameter
         alpha = 0
         
-    beta : array-like, shape = [n features]
+    beta : array-like, shape = (1 + n features,)
                 Vector of weights
 
     Returns
@@ -88,88 +88,155 @@ def _reg(lambd, alpha, beta):
     reg : float
         Value computed from regularization   
     '''
-    reg = lambd * alpha * beta + lambd * (1 - alpha)
+    P = lambd * alpha * beta + lambd * (1 - alpha)
     
-    return reg
+    return P
 
 
-def _bgd(n_iter, distr, descent, 
-         lambd, alpha, learning_rate, 
-         x, y, beta, 
-         n_samples, n_features):          
-    '''Implements variable-size batch gradient descent method'''
-    for i in range(0, n_iter):  
+def _bgd(distr, descent, 
+         lambd, alpha, lrn_rate, 
+         x, y, beta):          
+    '''Implements one cycle of variable-size batch gradient descent 
+    
+    Parameters
+    ----------    
+    distr : str
+        Name of the distribution. Choices:
+        gaussian | poisson | inv_gaussian | exponential | multinomial
+    
+    descent : str
+        Fitting method used:
+        bgd | newton
+    
+    lambd : float
+        General regularization parameter
+
+    alpha : float
+        Elastic net regularization parameter
+    
+    lrn_rate : float
+        Learning rate parameter implemented during gradient descent
         
-        # Initialize array of gradients for each feature
-        grad = np.zeros(n_features)
+    x : float, array-like
+        Training data
         
-        # Compute gradient for each feature
-        for j in range(0, n_features):
-            mu = _mu(distr, x, beta)
-            grad_update = sum(_grad(distr, mu, y) * x[:,j])
-            
-            # Apply regularization
-            if j == 0:
-                grad[j] = (1 / n_samples) * grad_update    
-            elif j != 0:
-                grad[j] = (1 / (2 * n_samples)) * grad_update + _reg(lambd, alpha, beta[j])
+    y : float, array-like, shape = [n_samples]
+        Vector of response data
+ 
+    beta : array-like, shape = (1 + n features,)
+        Vector of weights 
         
-        beta -= learning_rate * grad
+    Returns
+    -------
+    beta : array-like, shape = (1 + n_features,)
+        Updated parameters
+        '''  
+    n_samples = x.shape[0]
+    n_features = x.shape[1]
+
+    # Initialize array of gradients for each feature
+    grad = np.zeros(n_features)
+
+    # Compute gradient for each feature
+    for j in range(0, n_features):
+        mu = _mu(distr, x, beta)
+        grad_batch = sum(_grad(distr, mu, y) * x[:,j])
+
+        # Apply penalty
+        P = _penalty(lambd, alpha, beta[j])
+        if j == 0:
+            grad[j] = (1 / n_samples) * grad_batch   
+        elif j != 0:
+            grad[j] = (1 / (2 * n_samples)) * grad_batch + P
+        
+        beta -= lrn_rate * grad
      
     return beta
+
+def _newton(distr, descent, 
+            lambd, alpha, lrn_rate, 
+            x, y, beta):
+    '''Implements one cycle of newton coordinate descent method
     
+    Parameters
+    ----------
+    distr : str
+        Name of the distribution. Choices:
+        gaussian | poisson | inv_gaussian | exponential | multinomial
     
-def _sgd(n_iter, distr, descent, 
-         lambd, alpha, learning_rate, 
-         x, y, beta, 
-         n_samples, n_features):
-    '''Implements stochastic gradient descent method'''
-    for i in range(0, n_samples):
+    descent : str
+        Fitting method used:
+        bgd | newton
+    
+    lambd : float
+        General regularization parameter
+
+    alpha : float
+        Elastic net regularization parameter
+    
+    lrn_rate : float
+        Learning rate parameter implemented during gradient descent
         
-        # Initialize array of gradients for each feature
-        grad = np.zeros(n_features)
+    x : float, array-like
+        Training data
         
-        # Compute gradient for each feature
-        for j in range(0, n_features):       
-            mu = _mu(distr, x, beta)
-            grad_update = _grad(distr, mu[i], y[i]) * x[i,j]
-            
-            # Apply regularization
-            if j == 0:
-                grad = grad_update
-            elif j != 0:
-                grad = grad_update + _reg(lambd, alpha, beta[j])
-            
-        beta -= learning_rate * grad
-            
+    y : float, array-like, shape = [n_samples]
+        Vector of response data
+ 
+    beta : array-like, shape = (1 + n features,)
+        Vector of weights
+        
+    Returns
+    -------
+    beta : array-like, shape = (1 + n_features,)
+        Updated parameters
+    '''    
+    n_samples = x.shape[0]
+    n_features = x.shape[1]
+    
+    # Initialize array of gradients for each feature
+    grad = np.zeros(n_features)
+        
+    # Compute gradients for each feature
+    for j in range(0, n_features):
+        mu = _mu(distr, x, beta)     
+
+        grad_batch = sum(_grad(distr, mu, y) * x[:,j])
+        grad[j] = (1 / n_samples) * grad_batch
+
+    # Compute inverse Hessian matrix
+    inv_hessian = _inverse_hessian(x)
+    loss = np.dot(inv_hessian, grad)
+
+    beta -= lrn_rate * loss
+        
     return beta
 
 
-def _newton(n_iter, distr, descent, 
-            lambd, alpha, learning_rate, 
-            x, y, beta, 
-            n_samples, n_features):
-    '''Implements newton coordinate descent method''' 
-    for i in range(0, n_iter):
-        
-        # Initialize array of gradients for each feature
-        grad = np.zeros(n_features)
-        
-        # Compute gradients for each feature
-        for j in range(0, n_features):
-            mu = _mu(distr, x, beta)     
-            grad_update = sum(_grad(distr, mu, y) * x[:,j])
-            grad[j] = (1 / n_samples) * grad_update
-
-        # Compute inverse Hessian matrix
-        inv_hessian = _inverse_hessian(x)
-        loss = np.dot(inv_hessian, grad)
-            
-        beta -= learning_rate * loss
-        
-    return beta
-
+def _l2_loss(distr, beta, x, y, 
+             lambd, alpha):
+    '''Compute the L2 loss function'''
+    n_samples = x.shape[0]
+    mu = _mu(distr, x, beta)
+    P = sum(_penalty(lambd, alpha, beta))
+    loss = sum((mu - y)**2)
+    L2_loss = (1 / n_samples) * loss + P
     
+    return L2_loss
+
+
+def _cross_entropy_loss(distr, beta, x, y, 
+                        lambd, alpha):
+    '''Compute the cross-entropy loss function'''
+    n_samples = x.shape[0]
+    mu = _mu(distr, x, beta)
+    P = sum(_penalty(lambd, alpha, beta))
+    loss = sum(y * np.log(mu) + (1 - y) * np.log(1 - mu))
+    CE_loss = 0.5 * n_samples * loss + P
+    
+    return CE_loss
+    
+
 def _grad(distr, mu, y):
     '''Computes the gradient of empirical loss function. 
 
@@ -195,16 +262,15 @@ def _grad(distr, mu, y):
     grad = mu - y
         
     return grad
-
-#def _cross_validation():
+    
     
 class GLM(object):
     '''This class defines an object for estimating a generalized linear-model
 
     Parameters
     ----------
-    learning_rate : integer
-        Learning rate for computing the updated weights
+    lrn_rate : integer
+        learning rate for computing the updated weights
 
     Attributes
     ----------
@@ -215,12 +281,16 @@ class GLM(object):
     def __init__(self, 
                  distr='gaussian', 
                  task='regression',
-                 n_iter=100, 
-                 descent='BGD', 
-                 regularization='elasticnet',
-                 learning_rate=1, 
+                 n_iter=1000, 
+                 descent='newton', 
+                 penalty='elasticnet',
+                 lrn_rate=1e-2, 
                  lambd=1, 
-                 alpha=0.5):
+                 alpha=0.5,
+                 batch_sz = None,
+                 beta0_ = None,
+                 beta_ = None,
+                 tol = 1e-3):
         '''
 
         Attributes
@@ -240,11 +310,11 @@ class GLM(object):
             Fitting method used:
             BGD | SGD | N
             
-        regularization : str
+        penalty : str
             Name of regularization method used:
             l1 | l2 | elasticnet
 
-        learning_rate : float
+        lrn_rate : float
             Learning rate parameter implemented during gradient descent
 
         lambd : float
@@ -253,6 +323,18 @@ class GLM(object):
         alpha : float
             Elastic net regularization parameter
             alpha = 0
+            
+        batch_sz : float
+            Size of sample size batch for each training iteration
+            
+        beta0_ : float
+            Intercept term for the linear predictor 
+        
+        beta_ : array-like, shape = (n_features, )
+            Vector of parameters for the linear predictor
+            
+        tol : float
+            Tolerance for descent convergence
       
 
         Returns
@@ -265,10 +347,14 @@ class GLM(object):
         self.task = task
         self.n_iter = n_iter
         self.descent = descent
-        self.regularization = regularization
-        self.learning_rate = learning_rate
+        self.penalty = penalty
+        self.lrn_rate = lrn_rate
         self.lambd = lambd
         self.alpha = alpha
+        self.batch_sz = batch_sz
+        self.beta0_ = beta0_
+        self.beta_ = beta_
+        self.tol = tol
 
     def check_parameters(self):
         '''Check the input parameters'''
@@ -286,26 +372,26 @@ class GLM(object):
     def get_distribution(self):
         '''Checks the error distribution to be used'''
         try:
-            return DISTR_TYPES[self.distr]
+            return DISTRIBUTION[self.distr]
         except KeyError:
             raise ValueError('Distribution %s is not supported'
                              % self.distr)
         
-    def get_learning_method(self):
+    def get_descent(self):
         '''Validates the learning method'''
         try:
-            return LEARNING_METHOD[self.descent]
+            return DESCENT[self.descent]
         except KeyError:
             raise ValueError('Learning method %s is not supported'
                              % self.descent)
         
-    def get_regularization_type(self):
+    def get_penalty(self):
         '''Validates the regularization method'''
         try:
-            return REGULARIZATION_METHOD[self.regularization]
+            return PENALTY[self.penalty]
         except KeyError:
             raise ValueError('Regularization method %s is not supported'
-                             % self.regularization)
+                             % self.penalty)
         
     def fit(self, x, y):
         '''Computes the optimal weights that minimize the cost function
@@ -327,11 +413,18 @@ class GLM(object):
         self.check_parameters()
         self.get_task()
         self.get_distribution()
-        self.get_learning_method()
-        self.get_regularization_type()
+        self.get_descent()
+        self.get_penalty()
         
-        n_samples = np.shape(x)[0]
-        if n_samples != np.shape(y)[0]:
+        n_samples = x.shape[0]
+        
+        # Add intercept to training data
+        intercept = np.ones(n_samples)
+        x = np.column_stack((intercept, x))
+        
+        n_features = x.shape[1]
+  
+        if n_samples != y.shape[0]:
             raise ValueError('Dimension of response should be (n_samples,)')
             
         if not isinstance(x, np.ndarray):
@@ -339,33 +432,41 @@ class GLM(object):
             
         if not isinstance(y, np.ndarray):
             y = np.array(y)
-                   
-        # Construct bias term
-        bias = np.ones(n_samples)
-        x = np.vstack((bias, x))
-        x = x.T
-
-        n_features = np.shape(x)[1]
-        beta = np.ones(n_features)
         
-        # Select descent method
-        if self.descent == 'BGD':
-            beta = _bgd(self.n_iter, self.distr, self.descent, 
-                        self.lambd, self.alpha, self.learning_rate,
-                        x, y, beta, 
-                        n_samples, n_features)
+        # Initialize parameters
+        beta = np.zeros(n_features)
+        if self.beta0_ is None and self.beta_ is None:
+            beta[0] = abs(np.random.normal(0, 0.001, 1))
+            beta[1:] = abs(np.random.normal(0, 0.001, n_features-1))
             
-        elif self.descent == 'SGD':
-            beta = _sgd(self.n_iter, self.distr, self.descent, 
-                        self.lambd, self.alpha, self.learning_rate,
-                        x, y, beta, 
-                        n_samples, n_features)
-            
-        elif self.descent == 'N':
-            beta = _newton(self.n_iter, self.distr, self.descent, 
-                           self.lambd, self.alpha, self.learning_rate,
-                           x, y, beta, 
-                           n_samples, n_features)
+        else:
+            beta[0] = self.beta0_ 
+            beta[1:] = self.beta_
+        
+        # Initialize descent and accumulate losses
+        L = []
+        
+        for i in range(0, self.n_iter):   
+            if self.descent == 'bgd':
+                beta = _bgd(self.distr, self.descent, 
+                           self.lambd, self.alpha, self.lrn_rate, 
+                           x, y, beta)  
+                
+            elif self.descent == 'newton':
+                beta = _newton(self.distr, self.descent, 
+                               self.lambd, self.alpha, self.lrn_rate, 
+                               x, y, beta)
+  
+            # Accumulate loss depending on task
+            if TASK[self.task] == 0:
+                loss = _cross_entropy_loss(self.distr, beta, x, y, 
+                                              self.lambd, self.alpha)
+                L.append(loss)
+                  
+            elif TASK[self.task] == 1:
+                loss = _l2_loss(self.distr, beta, x, y, 
+                                   self.lambd, self.alpha)
+                L.append(loss)
                 
         return beta
 
