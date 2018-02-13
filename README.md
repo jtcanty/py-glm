@@ -1,2 +1,2 @@
 # py-glm
-Simple library implementing GLMs
+A small library that implements generalized linear models with regularization.
